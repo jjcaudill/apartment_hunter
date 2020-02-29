@@ -43,7 +43,7 @@ def usage():
   print(
       'Script to find availibility of AMLI apartments:\n'
       'Parameters:\n'
-      '\t--moveInDate or -m: Specify a move in date\n'
+      '\t--moveInDate or -m: Specify a move in date. Required!\n'
       '\t--floorplans or -f: Specify a comma delimited list of floorplans\n'
       '\t--priceMax or -p:   Specify maximum price you are willing to pay\n'
       '\t--sqftMin or -s:    Specify minimum square footage required\n'
@@ -132,9 +132,8 @@ class Floorplan:
     self.name           = data['floorplanName']
     self.number_id      = data['floorplanId']
     self.square_footage = data['sqftMin']
-    self.__fetch_details()
 
-  def __fetch_details(self):
+  def fetch_details(self):
     """For some reason they have two ids and both are needed on fetching"""
     cms = fetch_floorplan_details(self.number_id)
     self.floorplan_img = cms['data']['main_image']['url']
@@ -153,7 +152,7 @@ class Apartment:
 
 def main():
   opts, args = getopt.getopt(sys.argv[1:], 'hs:p:f:m:', ['help', 'bathroomsMin=', 'bedroomsMin=', 'sqftMin=', 'priceMax=', 'floorplans=', 'moveInDate='])
-  floorplans = []
+  specified_floorplans = []
   sqftMin = bedroomsMin = bathroomsMin = 0
   priceMax = sys.maxsize
   moveInDate = ''
@@ -170,31 +169,61 @@ def main():
     elif opt in ('-p', '--priceMax'):
       priceMax = int(val)
     elif opt in ('-f', '--floorplans'):
-      floorplans = val.split(',')
+      specified_floorplans = val.split(',')
     elif opt in ('-m', '--moveInDate'):
       moveInDate = val
 
   if not moveInDate:
-    raise Exception('Move In Date required!')
+    return usage()
 
-  response = requests.post(GRAPHQL_ENDPOINT, json=GRAPHQL_REQUEST, headers={'Content-Type':'application/json'})
-  if response.status_code != 200:
-    raise Exception('Failed to grab floorplans')
-
-  response_data = []
+  floorplans = []
   apartments = []
 
+
   try:
-    fetch_all_floorplans(moveInDate)
-    response_data = response.json()['data']['propertyFloorplansSummary']
-    for unit in response_data:
-      floorplanData[unit['floorplanName']] = unit
+    print('Grabbing floorplans!')
+    floorplan_data = fetch_all_floorplans(moveInDate)
+    
+    print('Fetched floorplans!')
+
+    # Convert data into Floorplans and add if matches filters
+    for data in floorplan_data:
+      if data['availableUnitCount'] == 0:
+        continue
+      floorplan = Floorplan(data)
+      if floorplan.bathrooms < bathroomsMin:
+        continue
+      if floorplan.bedrooms < bedroomsMin:
+        continue
+      if floorplan.square_footage < sqftMin:
+        continue
+      if floorplan.bathrooms < bathroomsMin:
+        continue
+      if floorplan.max_rent > priceMax:
+        continue
+      if specified_floorplans and floorplan.name not in specified_floorplans:
+        continue
+      floorplan.fetch_details()
+      floorplans.append(floorplan)
+    
+    print('Parsed floorplans!')
+    # Ok, now we have a list of all desired floorplans meeting our requirements. Time to get the apartments!
+
+    for floorplan in floorplans:
+      data_for_apartments = fetch_apartments(floorplan, moveInDate)
+      for data in data_for_apartments:
+        apartments.append(Apartment(data, floorplan))
+    
+    print('Parsed apartments!')
+
   except KeyError as error:
     raiseException('Floorplans received were malformed')
 
-  # Grabbed all the floorplans, now lets filter them down to the relevant ones
-  for key, value in floorplanData.items():
-    if 
+  # Now that we have the apartment data, lets email it to ourselves.
+  # TODO: insert into database and use that to diff.
+  for apartment in apartments:
+    print(apartment.unit)
+    print(apartment.floorplan.name)
 
   return 0
 
