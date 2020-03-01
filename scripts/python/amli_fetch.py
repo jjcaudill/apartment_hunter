@@ -1,9 +1,7 @@
-import requests
-import json
-import getopt
-import sys
-
-import os
+from requests import post as post_request
+from getopt import getopt
+from sys import maxsize, argv
+from os import environ
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 
@@ -58,28 +56,34 @@ def usage():
     )
   return 1
 
+def generate_html_font(text, size):
+  return '<font size="{}" face="verdana">{}</font>'.format(size, text)
+
 def generate_html(apartment_map):
-  html_content = '<body><ul>'
+  available_apartments = 0
+  available_floorplans = 0
+  html_content = ''
   for floorplan, apartments in apartment_map.items():
-    floorplan_name = '<font size="5" face="verdana">{}</font>'.format(floorplan.name)
+    if apartments:
+      available_floorplans += 1
+    floorplan_details = generate_html_font('Floorplan {}: {} sqft'.format(floorplan.name, floorplan.square_footage), 4)
     floorplan_img = '<img src="{}" alt="Floorplan {}">'.format(floorplan.img_url, floorplan.name)
-    html_content += '<li>{}{}<ul>'.format(floorplan_name, floorplan_img)
+    html_content += '<li>{}{}<ul>'.format(floorplan_details, floorplan_img)
     for apartment in apartments:
-      apartment_info = 'Unit {} on floor {} for ${}'.format(apartment.unit, apartment.floor, apartment.rent)
-      html_content += '<li><font size="3" face="verdana">{}</font></li>'.format(apartment_info)
+      available_apartments += 1
+      apartment_info = 'Unit {}: Floor {}, Price ${}'.format(apartment.unit, apartment.floor, apartment.rent)
+      html_content += '<li>{}</li>'.format(generate_html_font(apartment_info, 2))
     html_content += '</ul></li>'
-  html_content += '</ul></body>'
-  return html_content
+  html_found = 'Found {} apartments for {} different floorplans!{}'.format(available_apartments, available_floorplans, html_content)
+  results = '<body><ul>{}</body></ul>'.format(generate_html_font(html_found, 5))
+  return results, available_apartments
 
 # TODO: insert into database and use that to diff.
 def email_results(apartment_map):
-  available_apartments = 0
-  for floorplan, apartments in apartment_map.items():
-    for apartment in apartments:
-      available_apartments += 1
-
-  from_email = os.environ.get('SENDGRID_USERNAME')
-  html_content = generate_html(apartment_map)
+  print('Sending email!')
+  from_email = environ.get('SENDGRID_USERNAME')
+  api_key = environ.get('SENDGRID_API_KEY')
+  html_content, available_apartments = generate_html(apartment_map)
 
   message = Mail(
     from_email=from_email,
@@ -87,7 +91,7 @@ def email_results(apartment_map):
     subject='Found {} available apartments!'.format(available_apartments),
     html_content=html_content)
   try:
-      sg = SendGridAPIClient(os.environ.get('SENDGRID_API_KEY'))
+      sg = SendGridAPIClient(api_key)
       response = sg.send(message)
   except Exception as e:
       print(str(e))
@@ -95,7 +99,7 @@ def email_results(apartment_map):
 def fetch_all_floorplans(move_in_date):
   body = APARTMENT_LIST_REQUEST
   body['variables']['moveInDate'] = move_in_date
-  response = requests.post(GRAPHQL_ENDPOINT, json=body, headers={'Content-Type':'application/json'})
+  response = post_request(GRAPHQL_ENDPOINT, json=body, headers={'Content-Type':'application/json'})
   if response.status_code != 200:
     raise Exception('Failed to grab floorplans')
 
@@ -119,7 +123,7 @@ def fetch_all_floorplans(move_in_date):
 def fetch_floorplan_details(id):
   body = FLOORPLAN_ID_REQUEST
   body['variables']['amliId'] = id
-  response = requests.post(GRAPHQL_ENDPOINT, json=body, headers={'Content-Type':'application/json'})
+  response = post_request(GRAPHQL_ENDPOINT, json=body, headers={'Content-Type':'application/json'})
   if response.status_code != 200:
     raise Exception('Failed to grab floorplan details')
 
@@ -144,7 +148,7 @@ def fetch_apartments(floorplan, move_in_date):
   body['variables']['amliFloorplanId'] = floorplan.number_id
   body['variables']['floorplanId'] = floorplan.weird_id
   body['variables']['moveInDate'] = move_in_date
-  response = requests.post(GRAPHQL_ENDPOINT, json=body, headers={'Content-Type':'application/json'})
+  response = post_request(GRAPHQL_ENDPOINT, json=body, headers={'Content-Type':'application/json'})
   if response.status_code != 200:
     raise Exception('Failed to grab apartments')
 
@@ -191,10 +195,10 @@ class Apartment:
     self.unit           = data['unitNumber']
 
 def main():
-  opts, args = getopt.getopt(sys.argv[1:], 'hs:p:f:m:', ['help', 'bathrooms_min=', 'bedrooms_min=', 'sqft_min=', 'price_max=', 'floorplans=', 'moveInDate='])
+  opts, args = getopt(argv[1:], 'hs:p:f:m:', ['help', 'bathrooms_min=', 'bedrooms_min=', 'sqft_min=', 'price_max=', 'floorplans=', 'moveInDate='])
   specified_floorplans = []
   sqft_min = bedrooms_min = bathrooms_min = 0
-  price_max = sys.maxsize
+  price_max = maxsize
   move_in_date = ''
 
   for opt, val in opts:
