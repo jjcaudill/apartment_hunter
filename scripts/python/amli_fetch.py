@@ -38,7 +38,7 @@ FLOORPLAN_DETAILS_REQUEST = {
 }
 
 GRAPHQL_ENDPOINT = 'https://www.amli.com/graphql'
-RECIPIENT_EMAIL = 'jjc2011@gmail.com'
+RECIPIENT_EMAILS = ['jjc2011@gmail.com', 'maerth@gmail.com']
 
 # TODO: Way to interact with database to see history and how things have changed
 
@@ -85,16 +85,17 @@ def email_results(apartment_map):
   api_key = environ.get('SENDGRID_API_KEY')
   html_content, available_apartments = generate_html(apartment_map)
 
-  message = Mail(
-    from_email=from_email,
-    to_emails=RECIPIENT_EMAIL,
-    subject='Found {} available apartments!'.format(available_apartments),
-    html_content=html_content)
-  try:
-      sg = SendGridAPIClient(api_key)
-      response = sg.send(message)
-  except Exception as e:
-      print(str(e))
+  for email in RECIPIENT_EMAILS:
+    message = Mail(
+      from_email=from_email,
+      to_emails=email,
+      subject='Found {} available apartments!'.format(available_apartments),
+      html_content=html_content)
+    try:
+        sg = SendGridAPIClient(api_key)
+        response = sg.send(message)
+    except Exception as e:
+        print(str(e))
 
 def fetch_all_floorplans(move_in_date):
   body = APARTMENT_LIST_REQUEST
