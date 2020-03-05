@@ -71,7 +71,7 @@ def generate_html(apartment_map):
     html_content += '<li>{}{}<ul>'.format(floorplan_details, floorplan_img)
     for apartment in apartments:
       available_apartments += 1
-      apartment_info = 'Unit {}: Floor {}, Price ${}'.format(apartment.unit, apartment.floor, apartment.rent)
+      apartment_info = 'Unit {}: Floor {}, Price ${}, Pets {}, Date Available {}'.format(apartment.unit, apartment.floor, apartment.rent, apartment.pets, apartment.date_available)
       html_content += '<li>{}</li>'.format(generate_html_font(apartment_info, 2))
     html_content += '</ul></li>'
   html_found = 'Found {} apartments for {} different floorplans!{}'.format(available_apartments, available_floorplans, html_content)
